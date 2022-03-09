@@ -1,79 +1,82 @@
 package net.auoeke.uncheck;
 
-import java.lang.instrument.Instrumentation;
-import java.util.Objects;
-import java.util.function.Consumer;
 import com.sun.source.util.JavacTask;
 import com.sun.source.util.Plugin;
+import fr.stardustenterprises.deface.engine.NativeTransformationService;
+import fr.stardustenterprises.deface.engine.api.IClassTransformer;
+import fr.stardustenterprises.deface.engine.api.ITransformationService;
 import lombok.SneakyThrows;
-import net.auoeke.reflect.Reflect;
-import net.bytebuddy.agent.ByteBuddyAgent;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.tree.ClassNode;
-import org.objectweb.asm.tree.JumpInsnNode;
-import org.objectweb.asm.tree.MethodInsnNode;
-import org.objectweb.asm.tree.MethodNode;
-import org.objectweb.asm.tree.VarInsnNode;
+import org.objectweb.asm.tree.*;
+
+import java.util.function.Consumer;
 
 public class Uncheck implements Plugin, Opcodes {
-    @Override public String getName() {
+    @Override
+    public String getName() {
         return "uncheck";
     }
 
-    @Override public void init(JavacTask task, String... args) {}
+    @Override
+    public void init(JavacTask task, String... args) {
+    }
 
-    @Override public boolean autoStart() {
+    @Override
+    public boolean autoStart() {
         return true;
     }
 
     @SneakyThrows
-    private static void transform(Instrumentation instrumentation, Class<?> target, Consumer<ClassNode> transformer) {
-        Transformer t = (module, loader, name, type, domain, bytes) -> {
+    private static void transform(ITransformationService defaceService, Class<?> target, Consumer<ClassNode> transformer) {
+        IClassTransformer t = (type, loader, name, domain, bytes) -> {
             if (target != type) {
                 return bytes;
             }
 
-            var node = new ClassNode();
+            ClassNode node = new ClassNode();
             new ClassReader(bytes).accept(node, 0);
             transformer.accept(node);
-            var writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+            ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
             node.accept(writer);
 
             return writer.toByteArray();
         };
 
-        instrumentation.addTransformer(t, true);
-        instrumentation.retransformClasses(target);
-        instrumentation.removeTransformer(t);
+        defaceService.addTransformers(t);
+        defaceService.retransformClasses(target);
+        defaceService.removeTransformers(t);
     }
 
     private static MethodNode method(ClassNode type, String name) {
-        return type.methods.stream().filter(method -> method.name.equals(name)).findAny().get();
+        return type.methods.stream().filter(method -> method.name.equals(name)).findAny().orElse(null);
     }
 
     @SneakyThrows
-    private static void disableFlowAndCaptureAnalysis(Instrumentation instrumentation) {
-        transform(instrumentation, Class.forName("com.sun.tools.javac.comp.Flow"), node -> {
-            var analyzeTree = method(node, "analyzeTree");
-            var instructions = analyzeTree.instructions;
+    private static void disableFlowAndCaptureAnalysis(ITransformationService transformationService) {
+        transform(transformationService, Class.forName("com.sun.tools.javac.comp.Flow"), node -> {
+            MethodNode analyzeTree = method(node, "analyzeTree");
+            InsnList instructions = analyzeTree.instructions;
 
-            for (var instruction : instructions) {
-                if (instruction instanceof MethodInsnNode method && method.owner.matches(".+\\$(FlowAnalyzer|CaptureAnalyzer)$") && method.name.equals("analyzeTree")) {
-                    instructions.remove(instruction);
+            for (AbstractInsnNode instruction : instructions) {
+                if (instruction instanceof MethodInsnNode) {
+                    MethodInsnNode method = (MethodInsnNode) instruction;
+                    if (method.owner.matches(".+\\$(FlowAnalyzer|CaptureAnalyzer)$") && method.name.equals("analyzeTree")) {
+                        instructions.remove(instruction);
+                    }
                 }
             }
         });
     }
 
     @SneakyThrows
-    private static void allowNonConstructorFirstStatement(Instrumentation instrumentation) {
-        transform(instrumentation, Class.forName("com.sun.tools.javac.comp.Attr"), node -> {
-            var checkFirstConstructorStat = method(node, "checkFirstConstructorStat");
+    private static void allowNonConstructorFirstStatement(ITransformationService defaceService) {
+        transform(defaceService, Class.forName("com.sun.tools.javac.comp.Attr"), node -> {
+            MethodNode checkFirstConstructorStat = method(node, "checkFirstConstructorStat");
 
-            for (var instruction : checkFirstConstructorStat.instructions) {
-                if (instruction instanceof VarInsnNode var && var.var == 3) {
+            for (AbstractInsnNode instruction : checkFirstConstructorStat.instructions) {
+                if (instruction instanceof VarInsnNode && ((VarInsnNode)instruction).var == 3) {
                     ((JumpInsnNode) instruction.getNext()).setOpcode(GOTO);
 
                     break;
@@ -83,8 +86,8 @@ public class Uncheck implements Plugin, Opcodes {
     }
 
     static {
-        var instrumentation = Objects.requireNonNullElseGet(Reflect.instrumentation(), ByteBuddyAgent::install);
-        disableFlowAndCaptureAnalysis(instrumentation);
-        allowNonConstructorFirstStatement(instrumentation);
+        ITransformationService defaceService = NativeTransformationService.INSTANCE;
+        disableFlowAndCaptureAnalysis(defaceService);
+        allowNonConstructorFirstStatement(defaceService);
     }
 }

@@ -9,6 +9,7 @@ sourceSets {
 }
 
 repositories {
+    mavenLocal()
     mavenCentral()
     maven {url = "https://maven.auoeke.net"}
 }

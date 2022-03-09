@@ -5,7 +5,7 @@ plugins {
     id("io.freefair.lombok").version("latest.release")
 }
 
-version("0.2.0")
+version("0.3.0")
 
 allprojects {
     plugins.with {
@@ -15,7 +15,7 @@ allprojects {
 
     group("net.auoeke")
 
-    javaVersion(17)
+    javaVersion(8)
 
     repositories {
         mavenCentral()
@@ -31,8 +31,7 @@ allprojects {
 
 dependencies {
     implementation("org.ow2.asm:asm-tree")
-    implementation("net.bytebuddy:byte-buddy-agent")
-    implementation("net.auoeke:reflect")
+    implementation("fr.stardustenterprises:deface")
 
     testImplementation(gradleTestKit())
     testImplementation("org.junit.jupiter:junit-jupiter-api")
