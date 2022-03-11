@@ -29,7 +29,7 @@ public class Uncheck implements Plugin, Opcodes {
     }
 
     @SneakyThrows
-    private static void transform(ITransformationService defaceService, Class<?> target, Consumer<ClassNode> transformer) {
+    private static void transform(ITransformationService transformationService, Class<?> target, Consumer<ClassNode> transformer) {
         IClassTransformer t = (type, loader, name, domain, bytes) -> {
             if (target != type) {
                 return bytes;
@@ -44,9 +44,9 @@ public class Uncheck implements Plugin, Opcodes {
             return writer.toByteArray();
         };
 
-        defaceService.addTransformers(t);
-        defaceService.retransformClasses(target);
-        defaceService.removeTransformers(t);
+        transformationService.addTransformers(t);
+        transformationService.retransformClasses(target);
+        transformationService.removeTransformers(t);
     }
 
     private static MethodNode method(ClassNode type, String name) {
