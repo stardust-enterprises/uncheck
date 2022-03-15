@@ -5,5 +5,3 @@ pluginManagement {
         maven {url = "https://maven.auoeke.net"}
     }
 }
-
-include(":idea")
